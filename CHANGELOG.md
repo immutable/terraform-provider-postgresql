@@ -1,5 +1,13 @@
 ## Unreleased
 
+## 1.18.1 (October 25, 2022)
+
+* Fix identifier quoting in column-level privilege statements
+
+## 1.18.0 (August 30, 2022)
+
+* Add support for column-level privileges
+
 ## 1.17.1 (August 19, 2022)
 
 FIX:
