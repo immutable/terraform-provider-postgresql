@@ -266,6 +266,20 @@ func validatePrivileges(d *schema.ResourceData) error {
 	return nil
 }
 
+// getDataForRevoke returns a value for a REVOKE statement from the given resource data key.
+//
+// If the key has changes, the "old" value, which incorporates both previous Terraform state and any drift detected
+// during the planning phase, will be returned.
+//
+// If the key does not have changes, the current value is returned.
+func getDataForRevoke(d *schema.ResourceData, key string) interface{} {
+	if d.HasChange(key) {
+		oldValue, _ := d.GetChange(key)
+		return oldValue
+	}
+	return d.Get(key)
+}
+
 func pgArrayToSet(arr pq.ByteaArray) *schema.Set {
 	s := make([]interface{}, len(arr))
 	for i, v := range arr {
