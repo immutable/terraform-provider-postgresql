@@ -1,6 +1,7 @@
 package postgresql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -36,12 +37,22 @@ var objectTypes = map[string]string{
 
 func resourcePostgreSQLGrant() *schema.Resource {
 	return &schema.Resource{
-		Create: PGResourceFunc(resourcePostgreSQLGrantCreate),
-		// Since all of this resource's arguments force a recreation
-		// there's no need for an Update function
-		// Update:
+		Create: PGResourceFunc(resourcePostgreSQLGrantCreateOrUpdate),
+		Update: PGResourceFunc(resourcePostgreSQLGrantCreateOrUpdate),
 		Read:   PGResourceFunc(resourcePostgreSQLGrantRead),
 		Delete: PGResourceFunc(resourcePostgreSQLGrantDelete),
+
+		CustomizeDiff: func(ctx context.Context, diff *schema.ResourceDiff, i interface{}) error {
+			// Object types that only support a single object always force recreation
+			objectType := strings.ToUpper(diff.Get("object_type").(string))
+			if (diff.HasChange("permissions") || diff.HasChange("objects")) &&
+				(objectType == "FOREIGN_DATA_WRAPPER" || objectType == "FOREIGN_SERVER") {
+				if err := diff.ForceNew("objects"); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 
 		Schema: map[string]*schema.Schema{
 			"role": {
@@ -72,7 +83,7 @@ func resourcePostgreSQLGrant() *schema.Resource {
 			"objects": {
 				Type:        schema.TypeSet,
 				Optional:    true,
-				ForceNew:    true,
+				ForceNew:    false,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 				Set:         schema.HashString,
 				Description: "The specific objects to grant privileges on for this role (empty means all objects of the requested type)",
@@ -80,7 +91,7 @@ func resourcePostgreSQLGrant() *schema.Resource {
 			"columns": {
 				Type:        schema.TypeSet,
 				Optional:    true,
-				ForceNew:    true,
+				ForceNew:    false,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 				Set:         schema.HashString,
 				Description: "The specific columns to grant privileges on for this role",
@@ -88,7 +99,7 @@ func resourcePostgreSQLGrant() *schema.Resource {
 			"privileges": {
 				Type:        schema.TypeSet,
 				Required:    true,
-				ForceNew:    true,
+				ForceNew:    false,
 				Elem:        &schema.Schema{Type: schema.TypeString},
 				Set:         schema.HashString,
 				Description: "The list of privileges to grant",
@@ -128,7 +139,7 @@ func resourcePostgreSQLGrantRead(db *DBConnection, d *schema.ResourceData) error
 	return readRolePrivileges(txn, d)
 }
 
-func resourcePostgreSQLGrantCreate(db *DBConnection, d *schema.ResourceData) error {
+func resourcePostgreSQLGrantCreateOrUpdate(db *DBConnection, d *schema.ResourceData) error {
 	if err := validateFeatureSupport(db, d); err != nil {
 		return fmt.Errorf("feature is not supported: %v", err)
 	}
@@ -606,9 +617,9 @@ func createRevokeQuery(d *schema.ResourceData) string {
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
 	case "COLUMN":
-		objects := d.Get("objects").(*schema.Set)
-		columns := d.Get("columns").(*schema.Set)
-		privileges := d.Get("privileges").(*schema.Set)
+		objects := getDataForRevoke(d, "objects").(*schema.Set)
+		columns := getDataForRevoke(d, "columns").(*schema.Set)
+		privileges := getDataForRevoke(d, "privileges").(*schema.Set)
 		if privileges.Len() == 0 || columns.Len() == 0 {
 			// No privileges to revoke, so don't revoke anything
 			query = "SELECT NULL"
@@ -622,8 +633,8 @@ func createRevokeQuery(d *schema.ResourceData) string {
 			)
 		}
 	case "TABLE", "SEQUENCE", "FUNCTION", "PROCEDURE", "ROUTINE":
-		objects := d.Get("objects").(*schema.Set)
-		privileges := d.Get("privileges").(*schema.Set)
+		objects := getDataForRevoke(d, "objects").(*schema.Set)
+		privileges := getDataForRevoke(d, "privileges").(*schema.Set)
 		if objects.Len() > 0 {
 			if privileges.Len() > 0 {
 				// Revoking specific privileges instead of all privileges
@@ -668,6 +679,7 @@ func grantRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 	}
 
 	query := createGrantQuery(d, privileges)
+	log.Printf("[DEBUG] grantRolePrivileges: %s", query)
 
 	_, err := txn.Exec(query)
 	return err
@@ -675,6 +687,7 @@ func grantRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 
 func revokeRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 	query := createRevokeQuery(d)
+	log.Printf("[DEBUG] revokeRolePrivileges: %s", query)
 	if len(query) == 0 {
 		// Query is empty, don't run anything
 		return nil

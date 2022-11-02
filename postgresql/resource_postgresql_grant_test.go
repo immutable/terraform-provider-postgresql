@@ -184,6 +184,7 @@ func TestCreateRevokeQuery(t *testing.T) {
 
 	cases := []struct {
 		resource *schema.ResourceData
+		diff     map[string]interface{}
 		expected string
 	}{
 		{
@@ -261,6 +262,20 @@ func TestCreateRevokeQuery(t *testing.T) {
 			}),
 			expected: fmt.Sprintf(`REVOKE UPDATE,INSERT ON TABLE %[1]s."o2",%[1]s."o1" FROM %s`, pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
 		},
+		// Haven't been able to figure out how to mock old/new state in a Terraform ResourceData instance
+		//{
+		//	resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
+		//		"object_type": "table",
+		//		"objects":     tableObjects,
+		//		"schema":      databaseName,
+		//		"role":        roleName,
+		//		"privileges":  []interface{}{"INSERT", "UPDATE"},
+		//	}),
+		//	diff: map[string]interface{}{
+		//		"objects": []interface{}{"o1", "o3"},
+		//	},
+		//	expected: fmt.Sprintf(`REVOKE UPDATE,INSERT ON TABLE %[1]s."o2",%[1]s."o1" FROM %s`, pq.QuoteIdentifier(databaseName), pq.QuoteIdentifier(roleName)),
+		//},
 		{
 			resource: schema.TestResourceDataRaw(t, resourcePostgreSQLGrant().Schema, map[string]interface{}{
 				"object_type": "column",
@@ -291,7 +306,18 @@ func TestCreateRevokeQuery(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		out := createRevokeQuery(c.resource)
+		d := c.resource
+		d.SetId("fakeID")
+		d = resourcePostgreSQLGrant().Data(d.State())
+		// Attempt (failed) at mocking new/old instance state
+		//if len(c.diff) > 0 {
+		//	for k, v := range c.diff {
+		//		if err := d.Set(k, v); err != nil {
+		//			t.Fatalf(err.Error())
+		//		}
+		//	}
+		//}
+		out := createRevokeQuery(d)
 		if out != c.expected {
 			t.Fatalf("Error matching output and expected: %#v vs %#v", out, c.expected)
 		}
