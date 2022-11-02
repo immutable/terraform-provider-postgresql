@@ -1,5 +1,9 @@
 ## Unreleased
 
+## 1.19.0 (November 1, 2022)
+
+* Enable update-in-place for changes to grants that only affect `objects`, `columns`, and/or `privileges`.
+
 ## 1.18.1 (October 25, 2022)
 
 * Fix identifier quoting in column-level privilege statements
