@@ -1,16 +1,29 @@
-## Unreleased
+## 1.18.0 (November 26)
 
-## 1.19.0 (November 1, 2022)
+* **New resource**: `postgresql_server` and `postgresql_user_mapping` - @fabiopaiva
+  [#220](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/220)
 
-* Enable update-in-place for changes to grants that only affect `objects`, `columns`, and/or `privileges`.
+* **New resource**: `postgresql_subscription` - @nicarl
+  [#244](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/244)
 
-## 1.18.1 (October 25, 2022)
+* Allow to configure AWS Region with AWS IAM Auth - @bpaquet
+  [#260](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/260)
 
-* Fix identifier quoting in column-level privilege statements
+* Create temporary file for `GOOGLE_APPLICATION_CREDENTIALS` in Terraform cloud - @minkainc-opensource
+  [#249](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/249)
 
-## 1.18.0 (August 30, 2022)
+FIX:
 
-* Add support for column-level privileges
+* `postgresql_grant`: Concurrency issue on database privileges - @timothegenzmer
+  [#224](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/224)
+
+* `postgresql_grant`: Remove `TEMP` privileges for database - @cyrilgdn
+  [#243](https://github.com/cyrilgdn/terraform-provider-postgresql/pull/243)
+
+DEV IMPROVEMENTS:
+
+* Update Postgres versions in tests - @cyrilgdn
+
 
 ## 1.17.1 (August 19, 2022)
 
