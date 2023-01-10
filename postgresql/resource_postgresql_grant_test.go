@@ -945,6 +945,11 @@ CREATE FUNCTION test_schema.test_2() RETURNS text
 	AS $$ select 'foo'::text $$
     LANGUAGE SQL;
 `)
+	dbExecute(t, dsn, `
+CREATE FUNCTION test_schema.test_3() RETURNS text
+	AS $$ select 'foo'::text $$
+    LANGUAGE SQL;
+`)
 	defer func() {
 		dbExecute(t, dsn, "DROP SCHEMA test_schema CASCADE")
 		dbExecute(t, dsn, "DROP ROLE test_role")
@@ -964,33 +969,35 @@ CREATE FUNCTION test_schema.test_2() RETURNS text
 				Steps: []resource.TestStep{
 					{
 						// Grant to test_1 and test_2
-						Config: testConfigFunctionObjects(role, []string{"test_1(text)", "test_2()"}, []string{"EXECUTE"}),
+						Config: testConfigFunctionObjects(role, []string{"test_1(text)", "test_2()", "test_3"}, []string{"EXECUTE"}),
 						Check: resource.ComposeTestCheckFunc(
-							resource.TestCheckResourceAttr("postgresql_grant.test", "id", fmt.Sprintf("%s_postgres_test_schema_function_test_2()_test_1(text)", role)),
+							resource.TestCheckResourceAttr("postgresql_grant.test", "id", fmt.Sprintf("%s_postgres_test_schema_function_test_2()_test_3_test_1(text)", role)),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "privileges.#", "1"),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "privileges.0", "EXECUTE"),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "with_grant_option", "false"),
 							testCheckFunctionExecutable(t, "test_role", "test_schema.test_1('value')"),
 							testCheckFunctionExecutable(t, "test_role", "test_schema.test_2()"),
+							testCheckFunctionExecutable(t, "test_role", "test_schema.test_3()"),
 						),
 					},
 					{
 						// Remove execute privileges in postgres to ensure they're granted again
 						PreConfig: func() {
-							dbExecute(t, dsn, fmt.Sprintf(`REVOKE EXECUTE ON FUNCTION test_schema.test_2(), test_schema.test_1(text) FROM %s`, role))
+							dbExecute(t, dsn, fmt.Sprintf(`REVOKE EXECUTE ON FUNCTION test_schema.test_2(), test_schema.test_1(text), test_schema.test_3 FROM %s`, role))
 						},
-						Config: testConfigFunctionObjects(role, []string{"test_1(text)", "test_2()"}, []string{"EXECUTE"}),
+						Config: testConfigFunctionObjects(role, []string{"test_1(text)", "test_2()", "test_3"}, []string{"EXECUTE"}),
 						Check: resource.ComposeTestCheckFunc(
-							resource.TestCheckResourceAttr("postgresql_grant.test", "id", fmt.Sprintf("%s_postgres_test_schema_function_test_2()_test_1(text)", role)),
+							resource.TestCheckResourceAttr("postgresql_grant.test", "id", fmt.Sprintf("%s_postgres_test_schema_function_test_2()_test_3_test_1(text)", role)),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "privileges.#", "1"),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "privileges.0", "EXECUTE"),
 							resource.TestCheckResourceAttr("postgresql_grant.test", "with_grant_option", "false"),
 							testCheckFunctionExecutable(t, "test_role", "test_schema.test_1('value')"),
 							testCheckFunctionExecutable(t, "test_role", "test_schema.test_2()"),
+							testCheckFunctionExecutable(t, "test_role", "test_schema.test_3()"),
 						),
 					},
 					{
-						// Revoke privileges from test_1
+						// Revoke privileges from test_1 and test_3
 						Config: testConfigFunctionObjects(role, []string{"test_2()"}, []string{"EXECUTE"}),
 						Check: resource.ComposeTestCheckFunc(
 							resource.TestCheckResourceAttr("postgresql_grant.test", "id", fmt.Sprintf("%s_postgres_test_schema_function_test_2()", role)),
@@ -999,6 +1006,7 @@ CREATE FUNCTION test_schema.test_2() RETURNS text
 							resource.TestCheckResourceAttr("postgresql_grant.test", "with_grant_option", "false"),
 							testCheckFunctionNotExecutable(t, "test_role", "test_schema.test_1('value')"),
 							testCheckFunctionExecutable(t, "test_role", "test_schema.test_2()"),
+							testCheckFunctionNotExecutable(t, "test_role", "test_schema.test_3()"),
 						),
 					},
 				},

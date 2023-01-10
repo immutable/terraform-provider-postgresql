@@ -555,3 +555,18 @@ func isUniqueArr(arr []interface{}) (interface{}, bool) {
 	}
 	return nil, true
 }
+
+func normalizeFunctionNames(objects *schema.Set) *schema.Set {
+	normalizedObjects := make([]interface{}, objects.Len())
+	for i, v := range objects.List() {
+		normalizedObjects[i] = normalizeFunctionName(v.(string))
+	}
+	return schema.NewSet(schema.HashString, normalizedObjects)
+}
+
+func normalizeFunctionName(name string) string {
+	if strings.Index(name, "(") == -1 {
+		return name + "()"
+	}
+	return name
+}
