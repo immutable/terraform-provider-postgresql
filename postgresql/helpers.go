@@ -288,12 +288,21 @@ func pgArrayToSet(arr pq.ByteaArray) *schema.Set {
 	return schema.NewSet(schema.HashString, s)
 }
 
-func setToPgIdentList(schema string, idents *schema.Set) string {
+func setToPgIdentList(schema string, idents *schema.Set, quoteIdents ...bool) string {
+	// The quoteIndents variadic argument is used to pass an optional boolean value that defaults to true
+	useQuotes := true
+	if len(quoteIdents) > 0 {
+		useQuotes = quoteIdents[0]
+	}
 	quotedIdents := make([]string, idents.Len())
 	for i, ident := range idents.List() {
+		identifier := ident.(string)
+		if useQuotes {
+			identifier = pq.QuoteIdentifier(identifier)
+		}
 		quotedIdents[i] = fmt.Sprintf(
 			"%s.%s",
-			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(ident.(string)),
+			pq.QuoteIdentifier(schema), identifier,
 		)
 	}
 	return strings.Join(quotedIdents, ",")
@@ -545,4 +554,19 @@ func isUniqueArr(arr []interface{}) (interface{}, bool) {
 		keys[entry] = true
 	}
 	return nil, true
+}
+
+func normalizeFunctionNames(objects *schema.Set) *schema.Set {
+	normalizedObjects := make([]interface{}, objects.Len())
+	for i, v := range objects.List() {
+		normalizedObjects[i] = normalizeFunctionName(v.(string))
+	}
+	return schema.NewSet(schema.HashString, normalizedObjects)
+}
+
+func normalizeFunctionName(name string) string {
+	if strings.Index(name, "(") == -1 {
+		return name + "()"
+	}
+	return name
 }

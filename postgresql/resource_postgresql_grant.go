@@ -344,6 +344,61 @@ WHERE grantee = $2
 	return nil
 }
 
+func readFunctionRolePrivileges(txn *sql.Tx, d *schema.ResourceData, roleOID int) error {
+	objects := normalizeFunctionNames(d.Get("objects").(*schema.Set))
+
+	query := `
+SELECT CONCAT(pg_proc.proname, '(', pg_get_function_identity_arguments(pg_proc.oid), ')'), array_remove(array_agg(privilege_type), NULL)
+FROM pg_proc
+JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
+LEFT JOIN (
+    select acls.*
+    from (
+             SELECT proname, pronamespace, (aclexplode(proacl)).* FROM pg_proc
+         ) acls
+    WHERE grantee = $1
+) privs
+USING (proname, pronamespace)
+      WHERE nspname = $2
+GROUP BY pg_proc.oid, pg_proc.proname
+`
+	rows, err := txn.Query(
+		query, roleOID, d.Get("schema"),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	for rows.Next() {
+		var objName string
+		var privileges pq.ByteaArray
+
+		if err := rows.Scan(&objName, &privileges); err != nil {
+			return err
+		}
+
+		if objects.Len() > 0 && !objects.Contains(objName) {
+			continue
+		}
+
+		privilegesSet := pgArrayToSet(privileges)
+
+		if !privilegesSet.Equal(d.Get("privileges").(*schema.Set)) {
+			// If any object doesn't have the same privileges as saved in the state,
+			// we return its privileges to force an update.
+			log.Printf(
+				"[DEBUG] %s %s has not the expected privileges %v for role %s",
+				strings.ToTitle(d.Get("object_type").(string)), objName, privileges, d.Get("role"),
+			)
+			d.Set("privileges", privilegesSet)
+			break
+		}
+	}
+
+	return nil
+}
+
 func readColumnRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 	objects := d.Get("objects").(*schema.Set)
 
@@ -449,24 +504,7 @@ func readRolePrivileges(txn *sql.Tx, d *schema.ResourceData) error {
 		return readForeignServerRolePrivileges(txn, d, roleOID)
 
 	case "function", "procedure", "routine":
-		query = `
-SELECT pg_proc.proname, array_remove(array_agg(privilege_type), NULL)
-FROM pg_proc
-JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-LEFT JOIN (
-    select acls.*
-    from (
-             SELECT proname, pronamespace, (aclexplode(proacl)).* FROM pg_proc
-         ) acls
-    WHERE grantee = $1
-) privs
-USING (proname, pronamespace)
-      WHERE nspname = $2
-GROUP BY pg_proc.proname
-`
-		rows, err = txn.Query(
-			query, roleOID, d.Get("schema"),
-		)
+		return readFunctionRolePrivileges(txn, d, roleOID)
 
 	case "column":
 		return readColumnRolePrivileges(txn, d)
@@ -572,7 +610,26 @@ func createGrantQuery(d *schema.ResourceData, privileges []string) string {
 			setToPgIdentList(d.Get("schema").(string), objects),
 			pq.QuoteIdentifier(d.Get("role").(string)),
 		)
-	case "TABLE", "SEQUENCE", "FUNCTION", "PROCEDURE", "ROUTINE":
+	case "FUNCTION", "PROCEDURE", "ROUTINE":
+		objects := d.Get("objects").(*schema.Set)
+		if objects.Len() > 0 {
+			query = fmt.Sprintf(
+				"GRANT %s ON %s %s TO %s",
+				strings.Join(privileges, ","),
+				strings.ToUpper(d.Get("object_type").(string)),
+				setToPgIdentList(d.Get("schema").(string), objects, false),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		} else {
+			query = fmt.Sprintf(
+				"GRANT %s ON ALL %sS IN SCHEMA %s TO %s",
+				strings.Join(privileges, ","),
+				strings.ToUpper(d.Get("object_type").(string)),
+				pq.QuoteIdentifier(d.Get("schema").(string)),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		}
+	case "TABLE", "SEQUENCE":
 		objects := d.Get("objects").(*schema.Set)
 		if objects.Len() > 0 {
 			query = fmt.Sprintf(
@@ -646,7 +703,41 @@ func createRevokeQuery(d *schema.ResourceData) string {
 				pq.QuoteIdentifier(d.Get("role").(string)),
 			)
 		}
-	case "TABLE", "SEQUENCE", "FUNCTION", "PROCEDURE", "ROUTINE":
+	case "FUNCTION", "PROCEDURE", "ROUTINE":
+		objects := getDataForRevoke(d, "objects").(*schema.Set)
+		if objects.Len() > 0 {
+			query = fmt.Sprintf(
+				"REVOKE ALL PRIVILEGES ON %s %s FROM %s",
+				strings.ToUpper(d.Get("object_type").(string)),
+				setToPgIdentList(d.Get("schema").(string), objects, false),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		} else {
+			query = fmt.Sprintf(
+				"REVOKE ALL PRIVILEGES ON ALL %sS IN SCHEMA %s FROM %s",
+				strings.ToUpper(d.Get("object_type").(string)),
+				pq.QuoteIdentifier(d.Get("schema").(string)),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		}
+	case "SEQUENCE":
+		objects := getDataForRevoke(d, "objects").(*schema.Set)
+		if objects.Len() > 0 {
+			query = fmt.Sprintf(
+				"REVOKE ALL PRIVILEGES ON %s %s FROM %s",
+				strings.ToUpper(d.Get("object_type").(string)),
+				setToPgIdentList(d.Get("schema").(string), objects),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		} else {
+			query = fmt.Sprintf(
+				"REVOKE ALL PRIVILEGES ON ALL %sS IN SCHEMA %s FROM %s",
+				strings.ToUpper(d.Get("object_type").(string)),
+				pq.QuoteIdentifier(d.Get("schema").(string)),
+				pq.QuoteIdentifier(d.Get("role").(string)),
+			)
+		}
+	case "TABLE":
 		objects := getDataForRevoke(d, "objects").(*schema.Set)
 		privileges := getDataForRevoke(d, "privileges").(*schema.Set)
 		if objects.Len() > 0 {

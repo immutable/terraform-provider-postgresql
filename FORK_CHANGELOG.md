@@ -1,5 +1,6 @@
 ## Unreleased
 
+* Grants for functions now allow function signatures to be provided.
 * Merged from [upstream v1.18.0](https://github.com/cyrilgdn/terraform-provider-postgresql/commit/83f06753691b48f7caea7616e6fd443a085761a0)
 
 ## 1.19.0 (November 1, 2022)
