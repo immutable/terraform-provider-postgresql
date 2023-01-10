@@ -288,12 +288,21 @@ func pgArrayToSet(arr pq.ByteaArray) *schema.Set {
 	return schema.NewSet(schema.HashString, s)
 }
 
-func setToPgIdentList(schema string, idents *schema.Set) string {
+func setToPgIdentList(schema string, idents *schema.Set, quoteIdents ...bool) string {
+	// The quoteIndents variadic argument is used to pass an optional boolean value that defaults to true
+	useQuotes := true
+	if len(quoteIdents) > 0 {
+		useQuotes = quoteIdents[0]
+	}
 	quotedIdents := make([]string, idents.Len())
 	for i, ident := range idents.List() {
+		identifier := ident.(string)
+		if useQuotes {
+			identifier = pq.QuoteIdentifier(identifier)
+		}
 		quotedIdents[i] = fmt.Sprintf(
 			"%s.%s",
-			pq.QuoteIdentifier(schema), pq.QuoteIdentifier(ident.(string)),
+			pq.QuoteIdentifier(schema), identifier,
 		)
 	}
 	return strings.Join(quotedIdents, ",")
