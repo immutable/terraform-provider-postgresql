@@ -27,12 +27,12 @@ var allowedObjectTypes = []string{
 	"column",
 }
 
-var objectTypes = map[string]string{
-	"table":    "r",
-	"sequence": "S",
-	"function": "f",
-	"type":     "T",
-	"schema":   "n",
+var objectTypes = map[string][]string{
+	"table":    {"r", "v", "m", "f", "p"},
+	"sequence": {"S"},
+	"function": {"f"},
+	"type":     {"T"},
+	"schema":   {"n"},
 }
 
 func resourcePostgreSQLGrant() *schema.Resource {
@@ -416,7 +416,7 @@ FROM (SELECT relname, attname, (aclexplode(attacl)).*
                JOIN pg_attribute ON pg_class.oid = attrelid
       WHERE nspname = $2
         AND relname = $3
-        AND relkind = $4)
+        AND relkind = ANY($4))
          AS col_privs
          JOIN pg_roles ON pg_roles.oid = col_privs.grantee
 WHERE rolname = $1
@@ -425,7 +425,7 @@ GROUP BY col_privs.relname, col_privs.attname, col_privs.privilege_type
 ORDER BY col_privs.attname
 ;`
 	rows, err := txn.Query(
-		query, d.Get("role").(string), d.Get("schema"), objects.List()[0], objectTypes["table"], d.Get("privileges").(*schema.Set).List()[0],
+		query, d.Get("role").(string), d.Get("schema"), objects.List()[0], pq.Array(objectTypes["table"]), d.Get("privileges").(*schema.Set).List()[0],
 	)
 
 	if err != nil {
@@ -521,11 +521,11 @@ LEFT JOIN (
     WHERE grantee=$1
 ) privs
 USING (relname, relnamespace, relkind)
-WHERE nspname = $2 AND relkind = $3
+WHERE nspname = $2 AND relkind = ANY($3)
 GROUP BY pg_class.relname
 `
 		rows, err = txn.Query(
-			query, roleOID, d.Get("schema"), objectTypes[objectType],
+			query, roleOID, d.Get("schema"), pq.Array(objectTypes[objectType]),
 		)
 	}
 

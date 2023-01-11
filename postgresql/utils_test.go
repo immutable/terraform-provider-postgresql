@@ -145,6 +145,10 @@ func createTestRole(t *testing.T, roleName string) func() {
 }
 
 func createTestTables(t *testing.T, dbSuffix string, tables []string, owner string) func() {
+	return createTestTablesAndViews(t, dbSuffix, tables, []string{}, owner)
+}
+
+func createTestTablesAndViews(t *testing.T, dbSuffix string, tables []string, views []string, owner string) func() {
 	config := getTestConfig(t)
 	dbName, _ := getTestDBNames(dbSuffix)
 	adminUser := config.getDatabaseUsername()
@@ -176,6 +180,16 @@ func createTestTables(t *testing.T, dbSuffix string, tables []string, owner stri
 			}
 		}
 	}
+	for _, view := range views {
+		if _, err := db.Exec(fmt.Sprintf("CREATE VIEW %s (val, test_column_one, test_column_two) AS SELECT 'v', 't1', 't2'", view)); err != nil {
+			t.Fatalf("could not create test view in db %s: %v", dbName, err)
+		}
+		if owner != "" {
+			if _, err := db.Exec(fmt.Sprintf("ALTER VIEW %s OWNER TO %s", view, owner)); err != nil {
+				t.Fatalf("could not set test view owner to %s: %v", owner, err)
+			}
+		}
+	}
 	if owner != "" && !config.Superuser {
 		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE %s FROM %s", adminUser, owner, adminUser)); err != nil {
 			t.Fatalf("could not revoke role %s from %s: %v", owner, adminUser, err)
@@ -199,6 +213,11 @@ func createTestTables(t *testing.T, dbSuffix string, tables []string, owner stri
 		for _, table := range tables {
 			if _, err := db.Exec(fmt.Sprintf("DROP TABLE %s", table)); err != nil {
 				t.Fatalf("could not drop table %s: %v", table, err)
+			}
+		}
+		for _, view := range views {
+			if _, err := db.Exec(fmt.Sprintf("DROP VIEW %s", view)); err != nil {
+				t.Fatalf("could not drop view %s: %v", view, err)
 			}
 		}
 		if owner != "" && !config.Superuser {
