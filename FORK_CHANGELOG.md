@@ -1,4 +1,4 @@
-## Unreleased
+## 1.20.0 (January 11, 2023)
 
 * Properly support column privileges for views (and materialized views, foreign tables, and partitioned tables)
 * Grants for functions now allow function signatures to be provided.
