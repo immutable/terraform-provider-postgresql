@@ -565,7 +565,7 @@ func normalizeFunctionNames(objects *schema.Set) *schema.Set {
 }
 
 func normalizeFunctionName(name string) string {
-	if strings.Index(name, "(") == -1 {
+	if !strings.Contains(name, "(") {
 		return name + "()"
 	}
 	return name
