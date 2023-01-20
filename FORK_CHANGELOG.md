@@ -1,3 +1,6 @@
+## Unreleased
+* Allow replacing already existing functions on initial resource creation
+
 ## 1.20.0 (January 11, 2023)
 
 * Properly support column privileges for views (and materialized views, foreign tables, and partitioned tables)
