@@ -144,6 +144,59 @@ resource "postgresql_function" "increment" {
 	})
 }
 
+func TestAccPostgresqlFunction_ReplaceOnCreate(t *testing.T) {
+	skipIfNotAcc(t)
+	dbSuffix, teardown := setupTestDatabase(t, true, true)
+	defer teardown()
+
+	dbName, _ := getTestDBNames(dbSuffix)
+	config := fmt.Sprintf(`
+resource "postgresql_function" "replaced_function" {
+    name = "replaced_function"
+	database = "%s"
+	replace = true
+	returns = "integer"
+    body = <<-EOF
+        AS $$
+        BEGIN
+            RETURN 1;
+        END;
+        $$ LANGUAGE plpgsql;
+    EOF
+}
+`, dbName)
+	existingFunctions := map[string]string{
+		"replaced_function()": `
+RETURNS integer AS $$
+BEGIN
+	RETURN 42;
+END;
+$$ LANGUAGE plpgsql;
+`,
+	}
+
+	createTestFunctions(t, dbSuffix, existingFunctions, "")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testCheckCompatibleVersion(t, featureFunction)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckPostgresqlFunctionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckPostgresqlFunctionExists("postgresql_function.replaced_function", dbName),
+					resource.TestCheckResourceAttr("postgresql_function.replaced_function", "name", "replaced_function"),
+					resource.TestCheckResourceAttr("postgresql_function.replaced_function", "schema", "public"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccPostgresqlFunction_Update(t *testing.T) {
 	configCreate := `
 resource "postgresql_function" "func" {

@@ -17,6 +17,7 @@ const (
 	funcReturnsAttr     = "returns"
 	funcDropCascadeAttr = "drop_cascade"
 	funcDatabaseAttr    = "database"
+	funcReplaceAttr     = "replace"
 
 	funcArgTypeAttr    = "type"
 	funcArgNameAttr    = "name"
@@ -107,6 +108,12 @@ func resourcePostgreSQLFunction() *schema.Resource {
 				ForceNew:    true,
 				Description: "The database where the function is located. If not specified, the provider default database is used.",
 			},
+			funcReplaceAttr: {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "Replace the function if one already exists",
+			},
 		},
 	}
 }
@@ -118,8 +125,8 @@ func resourcePostgreSQLFunctionCreate(db *DBConnection, d *schema.ResourceData) 
 			db.version,
 		)
 	}
-
-	if err := createFunction(db, d, false); err != nil {
+	replace := d.Get(funcReplaceAttr).(bool)
+	if err := createFunction(db, d, replace); err != nil {
 		return err
 	}
 
