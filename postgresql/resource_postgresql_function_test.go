@@ -3,6 +3,7 @@ package postgresql
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -138,6 +139,107 @@ resource "postgresql_function" "increment" {
 						"postgresql_function.increment", "name", "increment"),
 					resource.TestCheckResourceAttr(
 						"postgresql_function.increment", "schema", "test"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccPostgresqlFunction_FailsCreateOnAlreadyExistingFunction(t *testing.T) {
+	skipIfNotAcc(t)
+	dbSuffix, teardown := setupTestDatabase(t, true, true)
+	defer teardown()
+
+	dbName, _ := getTestDBNames(dbSuffix)
+	config := fmt.Sprintf(`
+resource "postgresql_function" "basic_function" {
+    name = "basic_function"
+	database = "%s"
+	returns = "integer"
+    body = <<-EOF
+        AS $$
+        BEGIN
+            RETURN 1;
+        END;
+        $$ LANGUAGE plpgsql;
+    EOF
+}
+`, dbName)
+	existingFunctions := map[string]string{
+		"basic_function()": `
+RETURNS integer AS $$
+BEGIN
+	RETURN 42;
+END;
+$$ LANGUAGE plpgsql;
+`,
+	}
+
+	createTestFunctions(t, dbSuffix, existingFunctions, "")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testCheckCompatibleVersion(t, featureFunction)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckPostgresqlFunctionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				ExpectError: regexp.MustCompile("function \"[a-zA-Z_]+\" already exists with same argument types"),
+			},
+		},
+	})
+}
+
+func TestAccPostgresqlFunction_ReplaceOnCreate(t *testing.T) {
+	skipIfNotAcc(t)
+	dbSuffix, teardown := setupTestDatabase(t, true, true)
+	defer teardown()
+
+	dbName, _ := getTestDBNames(dbSuffix)
+	config := fmt.Sprintf(`
+resource "postgresql_function" "replaced_function" {
+    name = "replaced_function"
+	database = "%s"
+	replace = true
+	returns = "integer"
+    body = <<-EOF
+        AS $$
+        BEGIN
+            RETURN 1;
+        END;
+        $$ LANGUAGE plpgsql;
+    EOF
+}
+`, dbName)
+	existingFunctions := map[string]string{
+		"replaced_function()": `
+RETURNS integer AS $$
+BEGIN
+	RETURN 42;
+END;
+$$ LANGUAGE plpgsql;
+`,
+	}
+
+	createTestFunctions(t, dbSuffix, existingFunctions, "")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			testCheckCompatibleVersion(t, featureFunction)
+		},
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckPostgresqlFunctionDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckPostgresqlFunctionExists("postgresql_function.replaced_function", dbName),
+					resource.TestCheckResourceAttr("postgresql_function.replaced_function", "name", "replaced_function"),
+					resource.TestCheckResourceAttr("postgresql_function.replaced_function", "schema", "public"),
 				),
 			},
 		},

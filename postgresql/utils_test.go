@@ -294,6 +294,72 @@ func createTestSchemas(t *testing.T, dbSuffix string, schemas []string, owner st
 	}
 }
 
+func createTestFunctions(t *testing.T, dbSuffix string, functions map[string]string, owner string) func() {
+	config := getTestConfig(t)
+	dbName, _ := getTestDBNames(dbSuffix)
+	adminUser := config.getDatabaseUsername()
+
+	db, err := sql.Open("postgres", config.connStr(dbName))
+	if err != nil {
+		t.Fatalf("could not open connection pool for db %s: %v", dbName, err)
+	}
+	defer db.Close()
+
+	if owner != "" {
+		if !config.Superuser {
+			if _, err := db.Exec(fmt.Sprintf("GRANT %s TO CURRENT_USER", owner)); err != nil {
+				t.Fatalf("could not grant role %s to current user: %v", owner, err)
+			}
+		}
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s", owner)); err != nil {
+			t.Fatalf("could not set role to %s: %v", owner, err)
+		}
+	}
+
+	for funcName, functionBody := range functions {
+		query := "CREATE FUNCTION " + funcName +
+			functionBody
+		if _, err := db.Exec(query); err != nil {
+			t.Fatalf("could not create test function in db %s: %v", dbName, err)
+		}
+		if owner != "" {
+			if _, err := db.Exec(fmt.Sprintf("ALTER FUNCTION %s OWNER TO %s", funcName, owner)); err != nil {
+				t.Fatalf("could not set test function owner to %s: %v", owner, err)
+			}
+		}
+	}
+	if owner != "" && !config.Superuser {
+		if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE %s FROM %s", adminUser, owner, adminUser)); err != nil {
+			t.Fatalf("could not revoke role %s from %s: %v", owner, adminUser, err)
+		}
+	}
+
+	return func() {
+		db, err := sql.Open("postgres", config.connStr(dbName))
+		if err != nil {
+			t.Fatalf("could not open connection pool for db %s: %v", dbName, err)
+		}
+		defer db.Close()
+
+		if owner != "" && !config.Superuser {
+			if _, err := db.Exec(fmt.Sprintf("GRANT %s TO CURRENT_USER", owner)); err != nil {
+				t.Fatalf("could not grant role %s to current user: %v", owner, err)
+			}
+		}
+
+		for funcName := range functions {
+			if _, err := db.Exec(fmt.Sprintf("DROP FUNCTION %s", funcName)); err != nil {
+				t.Fatalf("could not drop function %s: %v", funcName, err)
+			}
+		}
+		if owner != "" && !config.Superuser {
+			if _, err := db.Exec(fmt.Sprintf("SET ROLE %s; REVOKE %s FROM %s", adminUser, owner, adminUser)); err != nil {
+				t.Fatalf("could not revoke role %s from %s: %v", owner, adminUser, err)
+			}
+		}
+	}
+}
+
 // testHasGrantForQuery executes a query and checks that it fails if
 // we were not allowed or succeses if we're allowed.
 func testHasGrantForQuery(db *sql.DB, query string, allowed bool) error {
