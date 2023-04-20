@@ -540,7 +540,7 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 	dbSuffix, teardown := setupTestDatabase(t, true, true)
 	defer teardown()
 
-	testTables := []string{"test_schema.test_table", "test_schema.test_table2"}
+	testTables := []string{"test_schema.test_table", "test_schema.test_table2", "test_schema.test_table3"}
 	testViews := []string{"test_schema.test_view"}
 	createTestTablesAndViews(t, dbSuffix, testTables, testViews, "")
 
@@ -549,13 +549,13 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 	// create a TF config with placeholder for privileges
 	// it will be filled in each step.
 	var testGrant = fmt.Sprintf(`
-	resource "postgresql_grant" "test" {
+	resource "postgresql_grant" "%%s" {
 		database    = "%s"
 		role        = "%s"
 		schema      = "test_schema"
 		object_type = "table"
 		objects     = %%s
-		privileges  = ["SELECT"]
+		privileges  = %%s
 	}
 	`, dbName, roleName)
 
@@ -567,7 +567,7 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 		Providers: testAccProviders,
 		Steps: []resource.TestStep{
 			{
-				Config: fmt.Sprintf(testGrant, `["test_table"]`),
+				Config: fmt.Sprintf(testGrant, "test", `["test_table"]`, `["SELECT"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr(
 						"postgresql_grant.test", "id", fmt.Sprintf("%s_%s_test_schema_table_test_table", roleName, dbName),
@@ -583,18 +583,33 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 				),
 			},
 			{
-				Config: fmt.Sprintf(testGrant, `["test_table", "test_table2"]`),
+				Config: fmt.Sprintf(testGrant, "test", `["test_table", "test_table2"]`, `["SELECT"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.#", "2"),
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.0", "test_table"),
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.1", "test_table2"),
 					func(*terraform.State) error {
-						return testCheckTablesPrivileges(t, dbName, roleName, testTables, []string{"SELECT"})
+						return testCheckTablesPrivileges(t, dbName, roleName, testTables[0:2], []string{"SELECT"})
 					},
 				),
 			},
 			{
-				Config: fmt.Sprintf(testGrant, `["test_table", "test_view"]`),
+				// A separate resource with different privileges should not affect an unrelated resource
+				Config: fmt.Sprintf(testGrant, "test", `["test_table", "test_table2"]`, `["SELECT"]`) +
+					fmt.Sprintf(testGrant, "test2", `["test_table3"]`, `["SELECT", "UPDATE"]`),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr("postgresql_grant.test2", "objects.#", "1"),
+					resource.TestCheckResourceAttr("postgresql_grant.test2", "objects.0", "test_table3"),
+					func(*terraform.State) error {
+						return testCheckTablesPrivileges(t, dbName, roleName, testTables[0:2], []string{"SELECT"})
+					},
+					func(*terraform.State) error {
+						return testCheckTablesPrivileges(t, dbName, roleName, []string{testTables[2]}, []string{"SELECT", "UPDATE"})
+					},
+				),
+			},
+			{
+				Config: fmt.Sprintf(testGrant, "test", `["test_table", "test_view"]`, `["SELECT"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.#", "2"),
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.0", "test_table"),
@@ -605,7 +620,7 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 				),
 			},
 			{
-				Config: fmt.Sprintf(testGrant, `["test_table"]`),
+				Config: fmt.Sprintf(testGrant, "test", `["test_table"]`, `["SELECT"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.#", "1"),
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.0", "test_table"),
@@ -619,7 +634,7 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 			},
 			{
 				// Empty list means that privileges will be applied on all tables.
-				Config: fmt.Sprintf(testGrant, `[]`),
+				Config: fmt.Sprintf(testGrant, "test", `[]`, `["SELECT"]`),
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.#", "0"),
 					func(*terraform.State) error {
@@ -628,7 +643,7 @@ func TestAccPostgresqlGrantObjects(t *testing.T) {
 				),
 			},
 			{
-				Config:  fmt.Sprintf(testGrant, `[]`),
+				Config:  fmt.Sprintf(testGrant, "test", `[]`, `["SELECT"]`),
 				Destroy: true,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttr("postgresql_grant.test", "objects.#", "0"),
