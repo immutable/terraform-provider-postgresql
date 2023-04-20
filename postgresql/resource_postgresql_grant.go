@@ -617,7 +617,7 @@ func createGrantQuery(d *schema.ResourceData, privileges []string) string {
 				"GRANT %s ON %s %s TO %s",
 				strings.Join(privileges, ","),
 				strings.ToUpper(d.Get("object_type").(string)),
-				setToPgIdentList(d.Get("schema").(string), objects, false),
+				setToPgIdentList(d.Get("schema").(string), objects),
 				pq.QuoteIdentifier(d.Get("role").(string)),
 			)
 		} else {
@@ -709,7 +709,7 @@ func createRevokeQuery(d *schema.ResourceData) string {
 			query = fmt.Sprintf(
 				"REVOKE ALL PRIVILEGES ON %s %s FROM %s",
 				strings.ToUpper(d.Get("object_type").(string)),
-				setToPgIdentList(d.Get("schema").(string), objects, false),
+				setToPgIdentList(d.Get("schema").(string), objects),
 				pq.QuoteIdentifier(d.Get("role").(string)),
 			)
 		} else {
