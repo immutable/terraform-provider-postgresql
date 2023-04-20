@@ -1,6 +1,11 @@
 ## Unreleased
 * Allow replacing already existing functions on initial resource creation
 
+## 1.21.0 (🔥April 20🔥, 2023)
+
+* Fixed bug causing unexpected revocations when a new grant resource was added
+* Merged from [upstream v.1.19.0](https://github.com/cyrilgdn/terraform-provider-postgresql/commit/cb85b9f45ee77b761d8ce08fd74f65350e152256)
+
 ## 1.20.0 (January 11, 2023)
 
 * Properly support column privileges for views (and materialized views, foreign tables, and partitioned tables)
