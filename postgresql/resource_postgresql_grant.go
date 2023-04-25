@@ -30,9 +30,6 @@ var allowedObjectTypes = []string{
 var objectTypes = map[string][]string{
 	"table":    {"r", "v", "m", "f", "p"},
 	"sequence": {"S"},
-	"function": {"f"},
-	"type":     {"T"},
-	"schema":   {"n"},
 }
 
 func resourcePostgreSQLGrant() *schema.Resource {
