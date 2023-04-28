@@ -45,7 +45,7 @@ resource "postgresql_role" "my_audited_role" {
   name     = "audited_role"
   login    = true
   password = "mypas"
-  
+
   parameter {
     name  = "pgaudit.log"
     value = "all"
@@ -144,6 +144,9 @@ configuration parameters.
 * `name` - (Required) Name of a configuration parameter.
 
 * `value` - (Required) Value to set for the configuration parameter.
+
+* `quote` - (Optional) Quote the value of the parameter as a literal.
+  Defaults value is `true`.
 
 ## Import Example
 
