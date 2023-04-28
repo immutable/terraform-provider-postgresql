@@ -1,10 +1,13 @@
-## Unreleased
-* Allow replacing already existing functions on initial resource creation
+## 1.22.0 (April 28, 2023)
+
+* Fix: use correct values for default ACL object types and `pg_class` kinds.
+* Add support for role-scoped configuration parameters.
 
 ## 1.21.0 (🔥April 20🔥, 2023)
 
 * Fixed bug causing unexpected revocations when a new grant resource was added
 * Merged from [upstream v.1.19.0](https://github.com/cyrilgdn/terraform-provider-postgresql/commit/cb85b9f45ee77b761d8ce08fd74f65350e152256)
+* Allow replacing already existing functions on initial resource creation
 
 ## 1.20.0 (January 11, 2023)
 
