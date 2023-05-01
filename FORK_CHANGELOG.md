@@ -1,3 +1,7 @@
+## 1.22.1 (May 1, 2023)
+
+* Add `quote` option to `parameter` blocks in `postgresql_role` resource with default of `true`.
+
 ## 1.22.0 (April 28, 2023)
 
 * Fix: use correct values for default ACL object types and `pg_class` kinds.
