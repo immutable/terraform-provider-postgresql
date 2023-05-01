@@ -38,6 +38,7 @@ const (
 	roleParameterAttr                       = "parameter"
 	roleParameterNameAttr                   = "name"
 	roleParameterValueAttr                  = "value"
+	roleParameterQuoteAttr                  = "quote"
 
 	// Deprecated options
 	roleDepEncryptedAttr = "encrypted"
@@ -207,6 +208,12 @@ func resourcePostgreSQLRoleConfigurationParameter() *schema.Resource {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "Value of the configuration parameter",
+			},
+			roleParameterQuoteAttr: {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     true,
+				Description: "Quote the parameter value as a literal",
 			},
 		},
 	}
@@ -520,7 +527,7 @@ func resourcePostgreSQLRoleReadImpl(db *DBConnection, d *schema.ResourceData) er
 
 	d.Set(rolePasswordAttr, password)
 
-	d.Set(roleParameterAttr, readRoleParameters(roleConfig))
+	d.Set(roleParameterAttr, readRoleParameters(roleConfig, d.Get(roleParameterAttr).(*schema.Set)))
 	return nil
 }
 
@@ -588,14 +595,22 @@ func readAssumeRole(roleConfig pq.ByteaArray) string {
 	return res
 }
 
-func readRoleParameters(roleConfig pq.ByteaArray) *schema.Set {
+func readRoleParameters(roleConfig pq.ByteaArray, existingParams *schema.Set) *schema.Set {
 	params := make([]interface{}, 0)
 	for _, v := range roleConfig {
 		tokens := strings.Split(string(v), "=")
 		if !sliceContainsStr(ignoredRoleConfigurationParameters, tokens[0]) {
+			quote := true
+			for _, p := range existingParams.List() {
+				existingParam := p.(map[string]interface{})
+				if existingParam[roleParameterNameAttr].(string) == tokens[0] {
+					quote = existingParam[roleParameterQuoteAttr].(bool)
+				}
+			}
 			params = append(params, map[string]interface{}{
 				roleParameterNameAttr:  tokens[0],
 				roleParameterValueAttr: tokens[1],
+				roleParameterQuoteAttr: quote,
 			})
 		}
 	}
@@ -1042,11 +1057,15 @@ func setConfigurationParameters(txn *sql.Tx, d *schema.ResourceData) error {
 		for _, p := range newParams.List() {
 			if !oldParams.Contains(p) {
 				param := p.(map[string]interface{})
+				value := param[roleParameterValueAttr].(string)
+				if param[roleParameterQuoteAttr].(bool) {
+					value = pq.QuoteLiteral(value)
+				}
 				query := fmt.Sprintf(
 					"ALTER ROLE %s SET %s TO %s",
 					pq.QuoteIdentifier(role),
 					pq.QuoteIdentifier(param[roleParameterNameAttr].(string)),
-					param[roleParameterValueAttr].(string))
+					value)
 				log.Printf("[DEBUG] setConfigurationParameters: %s", query)
 				if _, err := txn.Exec(query); err != nil {
 					return err

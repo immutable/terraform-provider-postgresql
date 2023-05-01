@@ -219,6 +219,7 @@ resource "postgresql_role" "role_created_with_params" {
   parameter {
     name  = "maintenance_work_mem"
     value = "10000"
+	quote = false
   }
 `
 
@@ -310,6 +311,7 @@ resource "postgresql_role" "role" {
   parameter {
     name  = "maintenance_work_mem"
     value = "10000"
+	quote = false
   }
 `
 
