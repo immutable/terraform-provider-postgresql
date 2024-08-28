@@ -903,6 +903,10 @@ func getRolesToGrant(txn *sql.Tx, d *schema.ResourceData) ([]string, error) {
 	if !sliceContainsStr(owners, schemaOwner) {
 		owners = append(owners, schemaOwner)
 	}
+	owners, err = resolveOwners(txn, owners)
+	if err != nil {
+		return nil, err
+	}
 
 	return owners, nil
 }
